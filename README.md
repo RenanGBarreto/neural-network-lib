@@ -1,2 +1,2 @@
-# deep-learning-tests
-Alguns algoritmos de Deep Learning
+# Deep Learning
+Some Deep Learning Algorithms
