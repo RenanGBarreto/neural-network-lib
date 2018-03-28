@@ -4,6 +4,11 @@ import pprint
 import pickle
 from viznet import connecta2a, connect121, node_sequence, NodeBrush, EdgeBrush, DynamicShow
 from sklearn.preprocessing import OneHotEncoder
+import matplotlib.pyplot as plt
+from sklearn.metrics import mean_squared_error
+from sklearn.model_selection import train_test_split
+from sklearn.utils import shuffle as shuffleDataset
+
 import pdb
 pdb.set_trace = lambda: 1  # This solves a problem with the python debugger and the library viznet
 
@@ -21,7 +26,7 @@ class Neuron:
         """
 
         self.weights = np.random.rand(inputs)
-        self.bias = np.random.random() + 0.001 # Just to make sure it is not zero :)
+        self.bias = 1 # Just to make sure it is not zero :)
         
         self.newWeights = self.weights
         self.newBias = self.bias
@@ -60,7 +65,7 @@ class Neuron:
         
         self.bias = self.newBias
         self.newBias = self.bias
-        
+         
     
     def foward(self, x, apply_activation=True, verbose=False):
         """
@@ -92,7 +97,8 @@ class NeuralNetwork:
     Class that represents a Feed-foward Neural Network that can be trained using backpropagation.
     """
     
-    def __init__(self, inputs=1, architecture=[1], lr=0.01, momentum=0, isClassification=False, autoEncode=False, activation='sigmoid', activation_last_layer='linear', seed=42):
+    def __init__(self, inputs=1, architecture=[1], lr=0.01, momentum=0, isClassification=False, autoEncode=False,
+                 activation='sigmoid', activation_last_layer='linear', seed=42):
         """
         Create a feed-foward neural network object.
         Param:
@@ -128,6 +134,7 @@ class NeuralNetwork:
 
         # Create the layers and neurons based on the architecture
         self.initLayers()
+        self.seed = seed
         
     def initLayers(self):
         """
@@ -181,8 +188,6 @@ class NeuralNetwork:
             return 0 if (value < 0) else 1
         elif func_type == 'linear':
             return 1
-
-            
     
     def predict(self, X, verbose=False):
         """
@@ -219,15 +224,15 @@ class NeuralNetwork:
             if self.isClassification:
                 if self.autoEncode: 
                     # If it is an autoEncode, do something similar to a "softmax"
-                    biggestIdx = 0
-                    biggestValue = -999999
+                    biggestIdx = -1
+                    biggestValue = 0
                     for idx in range(len(currentOutputs)):
-                        if currentOutputs[idx] >= biggestValue:
+                        if currentOutputs[idx] > biggestValue:
                             biggestValue = currentOutputs[idx]
                             biggestIdx = idx
 
                     for idx in range(len(currentOutputs)):
-                        currentOutputs[idx] = 1 if idx == biggestIdx else 0
+                        currentOutputs[idx] = 1 if idx == biggestIdx and biggestIdx >= 0 else 0
                 else:
                     # Apply the output filter if needed
                     for i in range(len(currentOutputs)):
@@ -307,36 +312,50 @@ class NeuralNetwork:
         """
         return pprint.pformat(vars(self), indent=1, width=1, depth=5)
     
-    def fit(self, x=None, y=None, batch_size=None, epochs=1, verbose=True, validation_split=0.1, shuffle=True):
+    def fit(self, X=None, y=None, batch_size=None, epochs=1, verbose=True, validation_split=0.2, shuffle=True, plot=False):
         """
         Train the Neural Network
         Param:
-            x: The input samples data, as a Numpy array (or list of Numpy arrays).
-        Return: Numpy array(s) with the training statistics
+            X: The input samples data, as a Numpy array (or list of Numpy arrays).
+            y: The input supervision
+            batch_size: the size of the minibatch, or None, if is a FULL batch
+            epochs: The number of batches
+            verbose: Shall we print training details
+            validation_split: How to split the dataset
+            shuffle: shuffle the dataset at each epoch
+            plot: Show a chart with the training statistics
+        Return: Training statistics: interactions, error_training, error_validation
         """       
         
-        # if we are on a classification tasks, lets automaticaly encode the classes
+        # If we are on a classification tasks, lets automaticaly encode the classes
         if self.autoEncode:
             self.encoder.fit(y)
         
-        X_train = x        
-        y_train = y if not self.autoEncode else self.encoder.transform(y)
+        # Shuffle and split the validation dataset
+        X_train, X_val, y_train_orig, y_val_orig = train_test_split(X, y, test_size=validation_split, random_state=self.seed, shuffle=shuffle)
         
-        ## TODO shuffle and split the validation dataset
-        X_val = x 
-        y_val = y if not self.autoEncode else self.encoder.transform(y)
- 
+        # Auto encode
+        y_train = y_train_orig if not self.autoEncode else self.encoder.transform(y_train_orig)
+        y_val = y_val_orig if not self.autoEncode else self.encoder.transform(y_val_orig)
+
         assert len(y_train[0]) == self.architecture[-1]
         assert len(y_val[0]) == self.architecture[-1]
 
         # Discover the corect bash size
         if batch_size == None or batch_size > len(X_train):
             batch_size = len(X_train)
-            
+        
+        interactions = []
+        error_training = []
+        error_validation = []
+        
         # For each epoch
         for e in range(epochs):
             
-            # TODO shuffle
+            # Suffle and autoencode if needed using the same order
+            if shuffle:
+                X_train, y_train_orig = shuffleDataset(X_train, y_train_orig)
+                y_train = y_train_orig if not self.autoEncode else self.encoder.transform(y_train_orig)
             
             # For each example
             for idx in range(len(X_train)):
@@ -424,5 +443,19 @@ class NeuralNetwork:
                     # For each neuron 
                     for n in range(len(self.layers[l])):
                         self.layers[l][n].adjustWeights()
+            
+            # Save statistics
+            interactions.append(e)
+            error_training.append(mean_squared_error(self.predict(X_train), y_train_orig, multioutput="uniform_average"))
+            error_validation.append(mean_squared_error(self.predict(X_val), y_val_orig, multioutput="uniform_average"))
         
-        return None
+        if plot:
+            fig, ax = plt.subplots(figsize=(10,7))
+            ax.plot(interactions, error_training, label="Training Set Error")
+            ax.plot(interactions, error_validation, label="Validation Set Error")
+            ax.set(xlabel='Interaction', ylabel='Error', title='Error x Epoch')
+            ax.legend()
+            ax.grid()
+            plt.show()
+            
+        return interactions, error_training, error_validation

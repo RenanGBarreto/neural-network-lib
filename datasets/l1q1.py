@@ -15,12 +15,13 @@ def randomizeArrayData(arr, variation=0.1):
         
     return arr
 
-def createDataSetE1Q1(n, variation=0.1):
+def createDataSetL1Q1(n, variation=0.1):
     """ 
     Creates a dataset: Classify the vertices of a cube
     Param:
         - n: The number of examples to generate
         - The variation to be added
+    Return: Two arrays with the dataset X and Y
     """
     
     X = []

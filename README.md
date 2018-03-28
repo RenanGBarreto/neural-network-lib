@@ -1,2 +1,2 @@
-# Deep Learning
-Some Deep Learning Algorithms
+# Deep Learning and Neural Network Library
+Neural Network library
