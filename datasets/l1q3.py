@@ -40,20 +40,6 @@ def createDataSetL1Q3A(datasetSize):
         
     return X, Y
 
-def randomizeArrayDataL1Q3B(arraySize):
-    """ 
-    Creates a new array of random float numbers between 0 and 4
-    Param:
-        - arraySize: The array size
-    Return: array of random float numbers between 0 and 4
-    """
-    arr = []
-    
-    for i in range(arraySize):
-        arr.append([np.random.uniform(0.00001, 4.0)]) 
-        
-    return arr
-
 def createDataSetL1Q3B(datasetSize):
     """ 
     Generates dataset for training following L1Q3B function format
@@ -62,7 +48,11 @@ def createDataSetL1Q3B(datasetSize):
     Return: Two arrays with the dataset X and Y
     """
     
-    X = randomizeArrayDataL1Q3B(datasetSize)
+    X =  []
+    
+    for i in np.linspace(0.00001, 4.0, datasetSize):
+        X.append([i])
+        
     Y = []
     
     # Creates datasetSize examples

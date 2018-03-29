@@ -8,7 +8,6 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import mean_squared_error
 from sklearn.model_selection import train_test_split
 from sklearn.utils import shuffle as shuffleDataset
-
 import pdb
 pdb.set_trace = lambda: 1  # This solves a problem with the python debugger and the library viznet
 
@@ -243,6 +242,9 @@ class NeuralNetwork:
                 y.append(np.dot([currentOutputs], self.encoder.active_features_).astype(int))
             else:
                 y.append(currentOutputs)
+        
+        if(not np.isfinite(y).all() and not self.isClassification):
+            print("Problems.. Some of the outputs are not finite", y, self)
             
         return y
     
@@ -312,7 +314,7 @@ class NeuralNetwork:
         """
         return pprint.pformat(vars(self), indent=1, width=1, depth=5)
     
-    def fit(self, X=None, y=None, batch_size=None, epochs=1, verbose=True, validation_split=0.2, shuffle=True, plot=False):
+    def fit(self, X=None, y=None, batch_size=1, epochs=1, verbose=True, validation_split=0.2, shuffle=True, plot=False):
         """
         Train the Neural Network
         Param:
@@ -342,28 +344,34 @@ class NeuralNetwork:
         assert len(y_val[0]) == self.architecture[-1]
 
         # Discover the corect bash size
-        if batch_size == None or batch_size > len(X_train):
+        if batch_size == None or batch_size > len(X_train) or batch_size <= 0:
             batch_size = len(X_train)
         
         interactions = []
         error_training = []
         error_validation = []
         
+        lastDelta = []
+
         # For each epoch
         for e in range(epochs):
-            
+                        
             # Suffle and autoencode if needed using the same order
             if shuffle:
                 X_train, y_train_orig = shuffleDataset(X_train, y_train_orig)
-                y_train = y_train_orig if not self.autoEncode else self.encoder.transform(y_train_orig)
+                y_train = y_train_orig if not self.autoEncode else self.encoder.transform(y_train_orig)                          
+
+            errors = []           
+            for c in range(len(self.layers[-1])):
+                errors.append([])
             
             # For each example
-            for idx in range(len(X_train)):
+            for idx in range(len(X_train)):  
                 
                 # Foward pass
-            
-                # For each layer
 
+                # For each layer
+                
                 outputs = []
                 vjs = []
                 
@@ -379,78 +387,135 @@ class NeuralNetwork:
 
                     # For each neuron 
                     for n in range(len(self.layers[l])):
-                        currentNeuron = self.layers[l][n]                    
-                        currentOutputs.append(currentNeuron.foward(currentInputs, apply_activation=True, verbose=verbose))                        
+                        currentNeuron = self.layers[l][n]  
+                        neuronOutput = currentNeuron.foward(currentInputs, apply_activation=True, verbose=verbose)
+                        currentOutputs.append(neuronOutput)                        
                         currentVjs.append(currentNeuron.foward(currentInputs, apply_activation=False, verbose=False))
+                        
+                        if(not np.isfinite(neuronOutput)):
+                            print("Problems on neuron output. NeuronOutput:", neuronOutput, currentNeuron)
+                        
+                        # if i'm in the last layer
+                        if l == len(self.layers)-1:
+                            errors[n].append(neuronOutput - y_train[idx][n])
 
                     # For the next layer, the input become the output of the preview layer
                     currentInputs = currentOutputs
                     outputs.append(currentOutputs)
-                    vjs.append(currentVjs)   
-                                    
+                    vjs.append(currentVjs)                    
+                
                 # Backwards pass
                 
                 lastLayerGradients = []
                 
-                # For each layer (reverse order)
-                for l in range(len(self.layers)-1, -1, -1):
-                    
-                    currentLayerGradients = []
-                    
-                    # For each neuron
-                    for n in range(len(self.layers[l])):
-                        
-                        currentNeuron = self.layers[l][n] 
-                        
-                        # Error for the last layer
-                        if l == len(self.layers) - 1:                            
+                currentDelta = []
 
-                            derivative = self.activation_function_derivative(currentNeuron.activation, vjs[l][n])
-                            grad = (outputs[l][n] - y_train[idx][n]) * derivative                  
-                                                        
-                        else:
-                            
-                            # Lets try to calculated the weighted sum of the gradients and weights 
-                            wSum = 0
-                            for nextNeuronIdx in range(len(self.layers[l+1])):                                                               
-                                wkj = self.layers[l+1][nextNeuronIdx].weights[n]
-                                gradj = lastLayerGradients[nextNeuronIdx]                                
-                                wSum += wkj*gradj
-                            
-                            wSum += self.layers[l][n].bias # add the bias
-                            
-                            vjDerivative = self.activation_function_derivative(currentNeuron.activation, vjs[l][n])                            
-                            grad = wSum * vjDerivative
-                             
-                        currentLayerGradients.append(grad)
-                        
-                        for w in range(len(currentNeuron.weights)):
+                # If we are on the end of a batch or on the end of the training examples, run the backward pass
+                if ( ( (idx+1) % batch_size) == 0 or (idx+1) == (len(X_train)) ) :
+                    
+                    #print(idx)
+                    
+                    # Calculate the mean squared error for the current batch
+                    currentOutputError = []
+                    for z in range(len(errors)):                            
+                        #currentOutputError.append(np.sum(np.square(errors[z])) / (float(2) * len(errors[z])) )
+                        currentOutputError.append(np.average(errors[z]))
+                        #currentOutputError.append(np.linalg.norm(errors[z]))
+                    
+                    # For each layer (reverse order)
+                    for l in range(len(self.layers)-1, -1, -1):
 
-                            if l == 0:
-                                delta = self.lr * grad * X_train[idx][w]
+                        currentLayerDelta = []
+
+                        currentLayerGradients = []
+
+                        # For each neuron
+                        for n in range(len(self.layers[l])):
+
+                            currentNeuron = self.layers[l][n] 
+
+                            # Error for the last layer
+                            if l == len(self.layers) - 1:                            
+
+                                derivative = self.activation_function_derivative(currentNeuron.activation, vjs[l][n])
+                                if batch_size == 1:
+                                    grad = - (y_train[idx][n] - outputs[l][n]) * derivative  # before implement the minibatch   
+                                else:
+                                    grad = currentOutputError[n] * derivative 
+                               
                             else:
-                                delta = self.lr * grad * outputs[l-1][w]
 
-                            currentNeuron.newWeights[w] = currentNeuron.weights[w] - delta
-                        
-                        # Lets try to adjust the bias too
-                        currentNeuron.newBias = currentNeuron.bias - delta * abs(currentNeuron.bias)
-                                                    
-                    lastLayerGradients = currentLayerGradients
+                                # Lets try to calculated the weighted sum of the gradients and weights 
+                                wSum = 0
+                                for nextNeuronIdx in range(len(self.layers[l+1])):                                                               
+                                    wkj = self.layers[l+1][nextNeuronIdx].weights[n]
+                                    gradj = lastLayerGradients[nextNeuronIdx]                                
+                                    wSum += wkj*gradj
 
-                # Lets update all weights of the network at once
-                for l in range(len(self.layers)):                    
-                    # For each neuron 
-                    for n in range(len(self.layers[l])):
-                        self.layers[l][n].adjustWeights()
+                                wSum += self.layers[l][n].bias # add the bias
+
+                                vjDerivative = self.activation_function_derivative(currentNeuron.activation, vjs[l][n])                            
+                                grad = wSum * vjDerivative
+                                
+                            currentLayerGradients.append(grad)
+
+                            currentNeuronMomentum = []
+
+                            for w in range(len(currentNeuron.weights)):
+
+                                currentMomentum = self.momentum * (lastDelta[l][n][w] if len(lastDelta) > 0 else 0)
+
+                                if l == 0:
+                                    signal = X_train[idx][w] 
+                                else:
+                                    signal = outputs[l-1][w]
+
+                                delta = self.lr * grad * signal
+                                currentNeuronMomentum.append(delta)
+
+                                currentNeuron.newWeights[w] = currentNeuron.weights[w] - delta + currentMomentum
+                                
+                                if(not np.isfinite(currentNeuron.newWeights[w])):
+                                    print("Problems on neuron new Weights/Bias. Neuron: ", currentNeuron, "; Delta: ", delta,
+                                          "; Momentum:", currentMomentum, "; GradLocal: ", grad, "; Signal: ", signal)
+
+                            currentLayerDelta.append(currentNeuronMomentum)
+
+                            # Lets try to adjust the bias too
+                            currentNeuron.newBias = currentNeuron.bias - self.lr * grad * currentNeuron.bias
+                            
+                            if(not np.isfinite(currentNeuron.newBias)):
+                                    print("Problems on neuron new Weights/Bias. Neuron: ", currentNeuron, "; Delta: ", delta)
+
+                        lastLayerGradients = currentLayerGradients
+
+                        # Save the deltas
+                        currentDelta.insert(0, currentLayerDelta)
+
+                    # Lets update all weights of the network at once
+                    for l in range(len(self.layers)):                    
+                        # For each neuron 
+                        for n in range(len(self.layers[l])):
+                            self.layers[l][n].adjustWeights()
+
+                    lastDelta = currentDelta
+                    
+                    # Clear the errors array
+                    errors = []  
+                    for c in range(len(self.layers[-1])):
+                        errors.append([])
             
+                
             # Save statistics
             interactions.append(e)
-            error_training.append(mean_squared_error(self.predict(X_train), y_train_orig, multioutput="uniform_average"))
+            #error_training.append(0)
+            #error_validation.append(0)
+            error_training.append(mean_squared_error(self.predict(X_train), y_train_orig, multioutput="uniform_average"))            
             error_validation.append(mean_squared_error(self.predict(X_val), y_val_orig, multioutput="uniform_average"))
         
         if plot:
             fig, ax = plt.subplots(figsize=(10,7))
+            ax.margins(0.05)
             ax.plot(interactions, error_training, label="Training Set Error")
             ax.plot(interactions, error_validation, label="Validation Set Error")
             ax.set(xlabel='Interaction', ylabel='Error', title='Error x Epoch')
