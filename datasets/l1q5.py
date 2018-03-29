@@ -1,33 +1,34 @@
 import numpy as np
 import math
 
-def createStepArray(arraySize, stepSize):
+def createDataSetL1Q5(n, lookback=5, lookahead=1):
     """ 
-    Creates a new array of numbers spaced by stepSize
-    """
-    arr = []
-    
-    for i in range(arraySize):
-        arr.append(stepSize*i)
-        
-    return arr
-
-
-def createDataSetL1Q5(datasetSize, stepSize, lookahead=1):
-    """ 
-    Generates dataset for training using Q5 function and the fact that each entry depends on the anterior one
+    Generates dataset for training using Q5 function
+    Param:
+        - n: THe number of points to extract
+        - lookback: how many points we will see on the past
+        - lookahead: how many points in future we will try to predict
+    Return: The serie
     """
     
-    X = range(0, datasetSize, stepSize)
-    Y = []
+    assert lookahead >= 1
+    assert lookback >= 0
+    x_points = np.linspace(0, 50, n)
     
-    for xi in X:
-        Y.append(np.sin(xi + (np.square(np.sin(X[i-1]))))) 
+    serie = []
     
-    # Creates datasetSize examples
-    for i in range(1, datasetSize):
-        Y.append(np.sin(X[i-1] + (np.square(np.sin(X[i-1]))))) # Desired function, in which each entry depends on the anterior
-        
-    return X, Y
+    for xi in x_points:
+        serie.append( np.sin(xi + (np.square(np.sin(xi)))) ) 
 
-display(generateDataset_Q5(20, 0.1))
+    X = []
+    y = []
+    for i in range(lookback, len(x_points)-lookahead):
+        
+        x_data = []
+        for c in range(lookback, 0, -1):
+            x_data.append(serie[i-c])
+        X.append(x_data)
+        
+        y.append([serie[i+lookahead]])
+    
+    return X, y

@@ -314,7 +314,7 @@ class NeuralNetwork:
         """
         return pprint.pformat(vars(self), indent=1, width=1, depth=5)
     
-    def fit(self, X=None, y=None, batch_size=1, epochs=1, verbose=True, validation_split=0.2, shuffle=True, plot=False):
+    def fit(self, X=None, y=None, batch_size=1, epochs=1, verbose=True, validation_split=0.2, shuffle=True, plot=False, lr_decay=None):
         """
         Train the Neural Network
         Param:
@@ -326,6 +326,7 @@ class NeuralNetwork:
             validation_split: How to split the dataset
             shuffle: shuffle the dataset at each epoch
             plot: Show a chart with the training statistics
+            lr_decay: The LR decay
         Return: Training statistics: interactions, error_training, error_validation
         """       
         
@@ -354,7 +355,8 @@ class NeuralNetwork:
         lastDelta = []
 
         # For each epoch
-        for e in range(epochs):
+        currentLR = self.lr
+        for e in range(epochs):            
                         
             # Suffle and autoencode if needed using the same order
             if shuffle:
@@ -482,7 +484,7 @@ class NeuralNetwork:
                             currentLayerDelta.append(currentNeuronMomentum)
 
                             # Lets try to adjust the bias too
-                            currentNeuron.newBias = currentNeuron.bias - self.lr * grad * currentNeuron.bias
+                            currentNeuron.newBias = currentNeuron.bias - currentLR * grad * currentNeuron.bias
                             
                             if(not np.isfinite(currentNeuron.newBias)):
                                     print("Problems on neuron new Weights/Bias. Neuron: ", currentNeuron, "; Delta: ", delta)
@@ -505,7 +507,8 @@ class NeuralNetwork:
                     for c in range(len(self.layers[-1])):
                         errors.append([])
             
-                
+            currentLR *= lr_decay if not lr_decay == None else 1
+            
             # Save statistics
             interactions.append(e)
             #error_training.append(0)
