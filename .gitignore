@@ -1,3 +1,6 @@
+notebooks/L2Q1-x_train-cache.pkl
+notebooks/L2Q1-y_train-cache.pkl
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
